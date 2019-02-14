@@ -8,11 +8,11 @@ package com.github.tommyettinger.bitnucleus.gen;
  */
 public final class YCoCgColor {
   public static byte luma(short ycocgcolor) {
-    return (byte)((ycocgcolor >>> 0) & 0b0000000000111111);
+    return (byte)(ycocgcolor & 0b0000000000111111);
   }
 
   public static short luma(short ycocgcolor, byte value) {
-    return (short)((ycocgcolor & 0b0000000000111111) | ((short)value << 0));
+    return (short)((ycocgcolor & 0b0000000000111111) | ((short)value));
   }
 
   public static byte chromOrange(short ycocgcolor) {
@@ -32,6 +32,6 @@ public final class YCoCgColor {
   }
 
   public static short get(byte luma, byte chromOrange, byte chromGreen) {
-    return (short)(((short)luma << 0) | ((short)chromOrange << 6) | ((short)chromGreen << 11));
+    return (short)(((short)luma) | ((short)chromOrange << 6) | ((short)chromGreen << 11));
   }
 }

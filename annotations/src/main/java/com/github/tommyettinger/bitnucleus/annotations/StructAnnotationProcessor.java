@@ -39,6 +39,31 @@ public class StructAnnotationProcessor extends AbstractProcessor{
         Utils.messager = processingEnv.getMessager();
     }
 
+    private String left(int offset, int total)
+    {
+        return offset == 0
+                ? total > 32 ? "1L" : "1"
+                : total > 32 ? "(1L << " + offset + ")" : "(1 << " + offset + ")";
+    }
+    private String left(String item, int offset)
+    {
+        return offset == 0
+                ? item
+                : "(" + item + " << " + offset + ")";
+    }
+
+//    private String right(int offset, int total)
+//    {
+//        return offset == 0
+//                ? total > 32 ? "1L" : "1"
+//                : total > 32 ? "(1L >>> " + offset + ")" : "(1 >>> " + offset + ")";
+//    }
+    private String right(String item, int offset)
+    {
+        return offset == 0
+                ? item
+                : "(" + item + " >>> " + offset + ")";
+    }
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv){
         if(round++ != 0) return false; //only process 1 round
@@ -104,37 +129,40 @@ public class StructAnnotationProcessor extends AbstractProcessor{
                         //[getter]
                         if(varType == TypeName.BOOLEAN){
                             //bools: single bit, is simplified
-                            getter.addStatement("return ($L & (1L << $L)) != 0", structParam, offset);
+                            getter.addStatement("return ($L & $L) != 0", structParam, left(offset, structSize));
                         }else if(varType == TypeName.FLOAT){
                             //floats: need conversion
-                            getter.addStatement("return Float.intBitsToFloat((int)(($L >>> $L) & $L))", structParam, offset, bitString(size, structTotalSize));
+                            getter.addStatement("return Float.intBitsToFloat((int)($L & $L))", right(structParam, offset), bitString(size, structTotalSize));
                         }else{
                             //bytes, shorts, chars, ints
-                            getter.addStatement("return ($T)(($L >>> $L) & $L)", varType, structParam, offset, bitString(size, structTotalSize));
+                            getter.addStatement("return ($T)($L & $L)", varType, right(structParam, offset), bitString(size, structTotalSize));
                         }
 
                         //[setter] + [constructor building]
                         if(varType == TypeName.BOOLEAN){
-                            cons.append(" | (").append(varName).append(" ? ").append("1L << ").append(offset).append(" : 0)");
+                            cons.append(" | (").append(varName).append(" ? ").append(left(offset, structSize)).append(" : 0)");
 
                             //bools: single bit, needs special case to clear things
-                            setter.addStatement("return value ? ($T)(($L | (1L << $L))) : ($T)(($L & ~(1L << $L)))",
-                                    structType, structParam, offset, structType, structParam, offset);
+                            setter.addStatement("return value ? ($T)(($L | $L)) : ($T)($L & ~$L)",
+                                    structType, structParam, left(offset, structSize), structType, structParam, left(offset, structSize));
 //                            setter.beginControlFlow("if(value)");
 //                            setter.addStatement("return ($T)(($L & ~(1L << $L)))", structType, structParam, offset);
 //                            setter.nextControlFlow("else");
 //                            setter.addStatement("return ($T)(($L | (1L << $L)))", structType, structParam, offset);
 //                            setter.endControlFlow();
                         }else if(varType == TypeName.FLOAT){
-                            cons.append(" | (").append("(").append(structType).append(")").append("Float.floatToIntBits(").append(varName).append(") << ").append(offset).append(')');
+                            cons.append(" | (").append("(").append(structType).append(")")
+                                    .append("Float.floatToIntBits(").append(varName).append(offset == 0 ? ")" : ") << " + offset).append(')');
 
                             //floats: need conversion
-                            setter.addStatement("return ($T)(($L & $L) | (($T)Float.floatToIntBits(value) << $L))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset);
+                            setter.addStatement("return ($T)(($L & $L) | (($T)Float.floatToIntBits(value)$L))",
+                                    structType, structParam, bitString(offset, size, structTotalSize), structType, 
+                                    offset == 0 ? "" : " << " + offset);
                         }else{
-                            cons.append(" | (").append("(").append(structType).append(")").append(varName).append(" << ").append(offset).append(')');
+                            cons.append(" | (").append("(").append(structType).append(")").append(varName).append(offset == 0 ? "" : " << " + offset).append(')');
 
                             //bytes, shorts, chars, ints
-                            setter.addStatement("return ($T)(($L & $L) | (($T)value << $L))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset);
+                            setter.addStatement("return ($T)(($L & $L) | (($T)value$L))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset == 0 ? "" : " << " + offset);
                         }
 
                         doc.append("<br>  ").append(varName).append(" [").append(offset).append("..").append(size + offset).append("]\n");
