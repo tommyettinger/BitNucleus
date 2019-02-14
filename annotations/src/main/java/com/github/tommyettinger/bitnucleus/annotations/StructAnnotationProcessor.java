@@ -1,11 +1,11 @@
-package io.anuke.annotations;
+package com.github.tommyettinger.bitnucleus.annotations;
 
+import com.github.tommyettinger.bitnucleus.annotations.Annotations.Struct;
+import com.github.tommyettinger.bitnucleus.annotations.Annotations.StructField;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
-import io.anuke.annotations.Annotations.Struct;
-import io.anuke.annotations.Annotations.StructField;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
@@ -22,11 +22,11 @@ import java.util.Set;
  * It would be nice if Java didn't make crazy hacks like this necessary.*/
 @SupportedSourceVersion(SourceVersion.RELEASE_8)
 @SupportedAnnotationTypes({
-    "io.anuke.annotations.Annotations.Struct"
+    "com.github.tommyettinger.bitnucleus.annotations.Annotations.Struct"
 })
 public class StructAnnotationProcessor extends AbstractProcessor{
     /** Name of the base package to put all the generated classes. */
-    private static final String packageName = "io.anuke.mindustry.gen";
+    private static final String packageName = "com.github.tommyettinger.bitnucleus.gen";
     private int round;
 
     @Override
@@ -115,24 +115,26 @@ public class StructAnnotationProcessor extends AbstractProcessor{
 
                         //[setter] + [constructor building]
                         if(varType == TypeName.BOOLEAN){
-                            cons.append(" | (").append(varName).append(" ? ").append("1L << ").append(offset).append("L : 0)");
+                            cons.append(" | (").append(varName).append(" ? ").append("1L << ").append(offset).append(" : 0)");
 
                             //bools: single bit, needs special case to clear things
-                            setter.beginControlFlow("if(value)");
-                            setter.addStatement("return ($T)(($L & ~(1L << $LL)))", structType, structParam, offset);
-                            setter.nextControlFlow("else");
-                            setter.addStatement("return ($T)(($L & ~(1L << $LL)) | (1L << $LL))", structType, structParam, offset, offset);
-                            setter.endControlFlow();
+                            setter.addStatement("return value ? ($T)(($L | (1L << $L))) : ($T)(($L & ~(1L << $L)))",
+                                    structType, structParam, offset, structType, structParam, offset);
+//                            setter.beginControlFlow("if(value)");
+//                            setter.addStatement("return ($T)(($L & ~(1L << $L)))", structType, structParam, offset);
+//                            setter.nextControlFlow("else");
+//                            setter.addStatement("return ($T)(($L | (1L << $L)))", structType, structParam, offset);
+//                            setter.endControlFlow();
                         }else if(varType == TypeName.FLOAT){
-                            cons.append(" | (").append("(").append(structType).append(")").append("Float.floatToIntBits(").append(varName).append(") << ").append(offset).append("L)");
+                            cons.append(" | (").append("(").append(structType).append(")").append("Float.floatToIntBits(").append(varName).append(") << ").append(offset).append(')');
 
                             //floats: need conversion
-                            setter.addStatement("return ($T)(($L & $L) | (($T)Float.floatToIntBits(value) << $LL))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset);
+                            setter.addStatement("return ($T)(($L & $L) | (($T)Float.floatToIntBits(value) << $L))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset);
                         }else{
-                            cons.append(" | (").append("(").append(structType).append(")").append(varName).append(" << ").append(offset).append("L)");
+                            cons.append(" | (").append("(").append(structType).append(")").append(varName).append(" << ").append(offset).append(')');
 
                             //bytes, shorts, chars, ints
-                            setter.addStatement("return ($T)(($L & $L) | (($T)value << $LL))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset);
+                            setter.addStatement("return ($T)(($L & $L) | (($T)value << $L))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset);
                         }
 
                         doc.append("<br>  ").append(varName).append(" [").append(offset).append("..").append(size + offset).append("]\n");
@@ -147,7 +149,7 @@ public class StructAnnotationProcessor extends AbstractProcessor{
                     classBuilder.addJavadoc(doc.toString());
 
                     //add constructor final statement + add to class and build
-                    constructor.addStatement("return ($T)($L)", structType, cons.toString().substring(3));
+                    constructor.addStatement("return ($T)($L)", structType, cons.substring(3));
                     classBuilder.addMethod(constructor.build());
 
                     JavaFile.builder(packageName, classBuilder.build()).build().writeTo(Utils.filer);
@@ -169,14 +171,20 @@ public class StructAnnotationProcessor extends AbstractProcessor{
         for(int i = 0; i < offset; i++) builder.append('0');
         for(int i = 0; i < size; i++) builder.append('1');
         for(int i = 0; i < totalSize - size - offset; i++) builder.append('0');
-        return "0b" + builder.reverse().toString() + "L";
+        if(totalSize > 32)
+            return builder.append("b0").reverse().append('L').toString();
+        else
+            return builder.append("b0").reverse().toString();
     }
 
     static String bitString(int size, int totalSize){
         StringBuilder builder = new StringBuilder();
         for(int i = 0; i < size; i++) builder.append('1');
         for(int i = 0; i < totalSize - size; i++) builder.append('0');
-        return "0b" + builder.reverse().toString() + "L";
+        if(totalSize > 32)
+            return builder.append("b0").reverse().append('L').toString();
+        else
+            return builder.append("b0").reverse().toString();
     }
 
     static int varSize(VariableElement var) throws IllegalArgumentException{

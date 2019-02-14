@@ -1,4 +1,4 @@
-package io.anuke.annotations;
+package com.github.tommyettinger.bitnucleus.annotations;
 
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
