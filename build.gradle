@@ -1,0 +1,88 @@
+buildscript{
+    repositories{
+        mavenLocal()
+        mavenCentral()
+        google()
+        maven{ url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        jcenter()
+    }
+
+    dependencies{
+    }
+}
+
+allprojects{
+    apply plugin: "idea"
+
+    version = 'release'
+
+    ext{
+        versionNumber = '0.1'
+        versionModifier = 'alpha'
+        appName = 'BitNucleusTests'
+    }
+
+    repositories{
+        mavenLocal()
+        mavenCentral()
+        maven{ url "https://oss.sonatype.org/content/repositories/snapshots/" }
+        maven{ url "https://oss.sonatype.org/content/repositories/releases/" }
+        maven{ url 'https://jitpack.io' }
+    }
+}
+
+project(":core"){
+    apply plugin: "java"
+
+    task cleanGen{
+        doFirst{
+            delete{
+                delete "../core/src/java/main/com/github/tommyettinger/bitnucleus/gen/"
+            }
+        }
+    }
+
+    task copyGen{
+        doLast{
+            copy{
+                from("../core/build/classes/java/main/com/github/tommyettinger/bitnucleus/gen/"){
+                    include "**/*.java"
+                }
+
+                into "../core/src/java/main/com/github/tommyettinger/bitnucleus/gen"
+            }
+        }
+    }
+
+    dependencies{
+        compileJava.dependsOn(cleanGen)
+        compileJava.finalizedBy(copyGen)
+
+        compileOnly project(":annotations")
+        annotationProcessor project(":annotations")
+    }
+}
+
+project(":tests"){
+    apply plugin: "java"
+
+    dependencies{
+        testImplementation project(":core")
+        testImplementation "org.junit.jupiter:junit-jupiter-params:5.3.1"
+        testImplementation "org.junit.jupiter:junit-jupiter-api:5.3.1"
+        testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:5.3.1"
+    }
+
+    test{
+        useJUnitPlatform()
+        workingDir = new File("../core/assets")
+    }
+}
+
+project(":annotations"){
+    apply plugin: "java"
+
+    dependencies{
+        compile 'com.squareup:javapoet:1.11.0'
+    }
+}
