@@ -10,6 +10,7 @@ import com.squareup.javapoet.TypeSpec;
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Modifier;
+import javax.lang.model.element.PackageElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeKind;
@@ -25,8 +26,6 @@ import java.util.Set;
     "com.github.tommyettinger.bitnucleus.annotations.Annotations.Struct"
 })
 public class StructAnnotationProcessor extends AbstractProcessor{
-    /** Name of the base package to put all the generated classes. */
-    private static final String packageName = "com.github.tommyettinger.bitnucleus.gen";
     private int round;
 
     @Override
@@ -179,8 +178,15 @@ public class StructAnnotationProcessor extends AbstractProcessor{
                     //add constructor final statement + add to class and build
                     constructor.addStatement("return ($T)($L)", structType, cons.substring(3));
                     classBuilder.addMethod(constructor.build());
-
-                    JavaFile.builder(packageName, classBuilder.build()).build().writeTo(Utils.filer);
+                    PackageElement pe = Utils.elementUtils.getPackageOf(elem);
+                    if(pe.isUnnamed())
+                    {
+                        JavaFile.builder("structs", classBuilder.build()).build().writeTo(Utils.filer);
+                    }
+                    else
+                    {
+                        JavaFile.builder(pe.getQualifiedName().toString() + ".structs", classBuilder.build()).build().writeTo(Utils.filer);
+                    }
                 }catch(IllegalArgumentException e){
                     e.printStackTrace();
                     Utils.messager.printMessage(Kind.ERROR, e.getMessage(), elem);

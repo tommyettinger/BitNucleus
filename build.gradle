@@ -64,23 +64,21 @@ project(":core"){
 
 project(":tests"){
     apply plugin: "java"
-    apply plugin: "org.inferred.processors"
     task cleanGenTest{
         doFirst{
-            delete{
-                delete "../tests/src/test/java/com/github/tommyettinger/bitnucleus/gen/"
-            }
+            delete fileTree(dir: '../tests/', include: '**/structs/*.java')                 
         }
     }
+    apply plugin: "org.inferred.processors"
 
     task copyGenTest{
         doLast{
             copy{
-                from("../tests/build/classes/java/test/com/github/tommyettinger/bitnucleus/gen/"){
+                from("../tests/build/classes/java/test/"){
                     include "**/*.java"
                 }
 
-                into "../tests/src/test/java/com/github/tommyettinger/bitnucleus/gen"
+                into "../tests/src/test/java/"
             }
         }
     }

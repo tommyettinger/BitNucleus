@@ -1,4 +1,4 @@
-package com.github.tommyettinger.bitnucleus.gen;
+package com.github.tommyettinger.bitnucleus.structs;
 
 /**
  * Bits used: 16 / 16

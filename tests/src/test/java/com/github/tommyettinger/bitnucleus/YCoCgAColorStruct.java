@@ -6,8 +6,8 @@ import com.github.tommyettinger.bitnucleus.annotations.Annotations.StructField;
 /**
  * Created by Tommy Ettinger on 2/13/2019.
  */
-@Struct
-public class YCoCgAColorStruct {
+@Struct 
+class YCoCgAColorStruct {
     @StructField(5)
     public byte luma;
     @StructField(5)
