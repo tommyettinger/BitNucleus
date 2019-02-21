@@ -2,17 +2,11 @@ package com.github.tommyettinger.bitnucleus.annotations;
 
 import com.github.tommyettinger.bitnucleus.annotations.Annotations.Struct;
 import com.github.tommyettinger.bitnucleus.annotations.Annotations.StructField;
-import com.squareup.javapoet.JavaFile;
-import com.squareup.javapoet.MethodSpec;
-import com.squareup.javapoet.TypeName;
-import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.*;
 
 import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.PackageElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.util.ElementFilter;
 import javax.tools.Diagnostic.Kind;
@@ -44,12 +38,12 @@ public class StructAnnotationProcessor extends AbstractProcessor{
                 ? total > 32 ? "1L" : "1"
                 : total > 32 ? "(1L << " + offset + ")" : "(1 << " + offset + ")";
     }
-    private String left(String item, int offset)
-    {
-        return offset == 0
-                ? item
-                : "(" + item + " << " + offset + ")";
-    }
+//    private String left(String item, int offset)
+//    {
+//        return offset == 0
+//                ? item
+//                : "(" + item + " << " + offset + ")";
+//    }
 
 //    private String right(int offset, int total)
 //    {
@@ -85,7 +79,12 @@ public class StructAnnotationProcessor extends AbstractProcessor{
 
                 try{
                     List<VariableElement> variables = ElementFilter.fieldsIn(elem.getEnclosedElements());
-                    int structSize = variables.stream().mapToInt(StructAnnotationProcessor::varSize).sum();
+                    //int structSize = variables.stream().mapToInt(StructAnnotationProcessor::varSize).sum();
+                    int structSize = 0;
+                    for(VariableElement v : variables)
+                    {
+                        structSize += varSize(v);
+                    }
                     int structTotalSize = (structSize <= 8 ? 8 : structSize <= 16 ? 16 : structSize <= 32 ? 32 : 64);
 
                     if(variables.size() == 0){
@@ -128,10 +127,15 @@ public class StructAnnotationProcessor extends AbstractProcessor{
                         //[getter]
                         if(varType == TypeName.BOOLEAN){
                             //bools: single bit, is simplified
-                            getter.addStatement("return ($L & $L) != 0", structParam, left(offset, structSize));
+                            getter.addStatement("return ($L & $L) != 0", structParam, left(offset, structTotalSize));
                         }else if(varType == TypeName.FLOAT){
                             //floats: need conversion
                             getter.addStatement("return Float.intBitsToFloat((int)($L & $L))", right(structParam, offset), bitString(size, structTotalSize));
+                        }else if(!varType.isPrimitive()){
+                            //enums
+                            classBuilder.addField(FieldSpec.builder(ArrayTypeName.of(varType),
+                                    "$VALUES$" + varName, Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL).initializer("$T.values()", varType).build());
+                            getter.addStatement("return $$VALUES$$$L[(int)($L & $L)]", varName, right(structParam, offset), bitString(size, structTotalSize));
                         }else{
                             //bytes, shorts, chars, ints
                             getter.addStatement("return ($T)($L & $L)", varType, right(structParam, offset), bitString(size, structTotalSize));
@@ -139,26 +143,30 @@ public class StructAnnotationProcessor extends AbstractProcessor{
 
                         //[setter] + [constructor building]
                         if(varType == TypeName.BOOLEAN){
-                            cons.append(" | (").append(varName).append(" ? ").append(left(offset, structSize)).append(" : 0)");
+                            cons.append(" | (").append(varName).append(" ? ").append(left(offset, structTotalSize)).append(" : 0)");
 
                             //bools: single bit, needs special case to clear things
                             setter.addStatement("return value ? ($T)(($L | $L)) : ($T)($L & ~$L)",
-                                    structType, structParam, left(offset, structSize), structType, structParam, left(offset, structSize));
+                                    structType, structParam, left(offset, structTotalSize), structType, structParam, left(offset, structTotalSize));
 //                            setter.beginControlFlow("if(value)");
 //                            setter.addStatement("return ($T)(($L & ~(1L << $L)))", structType, structParam, offset);
 //                            setter.nextControlFlow("else");
 //                            setter.addStatement("return ($T)(($L | (1L << $L)))", structType, structParam, offset);
 //                            setter.endControlFlow();
                         }else if(varType == TypeName.FLOAT){
-                            cons.append(" | (").append("(").append(structType).append(")")
+                            cons.append(" | ((").append(structType).append(')')
                                     .append("Float.floatToIntBits(").append(varName).append(offset == 0 ? ")" : ") << " + offset).append(')');
 
                             //floats: need conversion
                             setter.addStatement("return ($T)(($L & $L) | (($T)Float.floatToIntBits(value)$L))",
                                     structType, structParam, bitString(offset, size, structTotalSize), structType, 
                                     offset == 0 ? "" : " << " + offset);
-                        }else{
-                            cons.append(" | (").append("(").append(structType).append(")").append(varName).append(offset == 0 ? "" : " << " + offset).append(')');
+                        }else if(!varType.isPrimitive()){
+                            cons.append(" | ((").append(structType).append(')').append(varName).append(".ordinal()").append(offset == 0 ? "" : " << " + offset).append(')');
+                            setter.addStatement("return ($T)(($L & $L) | (($T)value$L))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset == 0 ? ".ordinal()" : ".ordinal() << " + offset);
+                        }
+                        else{
+                            cons.append(" | ((").append(structType).append(')').append(varName).append(offset == 0 ? "" : " << " + offset).append(')');
 
                             //bytes, shorts, chars, ints
                             setter.addStatement("return ($T)(($L & $L) | (($T)value$L))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset == 0 ? "" : " << " + offset);
@@ -222,8 +230,12 @@ public class StructAnnotationProcessor extends AbstractProcessor{
     }
 
     static int varSize(VariableElement var) throws IllegalArgumentException{
+//        Utils.messager.printMessage(Kind.NOTE, var.getKind().toString());
         if(!var.asType().getKind().isPrimitive()){
-            throw new IllegalArgumentException("All struct fields must be primitives: " + var);
+            StructField a = var.getAnnotation(StructField.class);
+            if(a == null) throw new IllegalArgumentException("Enum fields must be annotated with @StructField");
+            return a.value();
+//            throw new IllegalArgumentException("All struct fields must be primitives or enums: " + var);
         }
 
         StructField an = var.getAnnotation(StructField.class);
